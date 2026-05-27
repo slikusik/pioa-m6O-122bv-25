@@ -1,4 +1,4 @@
-from tui import run
+from src.db.tui import run
 
 
 def main():

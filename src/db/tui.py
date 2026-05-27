@@ -1,4 +1,4 @@
-from backend.memory import StudentDB
+from src.db.backend.memory import StudentDB
 
 db = StudentDB()
 
