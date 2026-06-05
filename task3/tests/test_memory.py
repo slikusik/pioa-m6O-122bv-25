@@ -5,10 +5,8 @@ from src.db.backend.errors import RecordNotFoundError, RecordAlreadyExistsError,
 
 class TestStudentDB(unittest.TestCase):
     def setUp(self):
-        """Создаёт новую БД перед каждым тестом."""
         self.db = StudentDB()
 
-    # --- Тесты для create_record ---
     def test_create_record_success(self):
         rec = self.db.create_record(1, "Иван", "Иванов", 20, "м")
         self.assertEqual(rec, (1, "Иван", "Иванов", 20, "м"))
@@ -77,7 +75,6 @@ class TestStudentDB(unittest.TestCase):
         with self.assertRaises(RecordNotFoundError):
             self.db.update_record(student_id=999, new_first_name="Петр")
 
-    # --- Тесты для delete_record ---
     def test_delete_success(self):
         self.db.create_record(1, "Иван", "Иванов", 20, "м")
         self.assertEqual(len(self.db.delete_record(student_id=1)), 1)
@@ -92,7 +89,6 @@ class TestStudentDB(unittest.TestCase):
         self.db.create_record(1, "Иван", "Иванов", 20, "м")
         self.assertIsNone(self.db.delete_record())
 
-    # --- Тесты для sort_records ---
     def test_sort_records_ascending(self):
         self.db.create_record(3, "Иван", "Иванов", 20, "м")
         self.db.create_record(1, "Петр", "Петров", 21, "м")

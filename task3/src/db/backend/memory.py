@@ -9,7 +9,7 @@ class StudentDB:
 
     def create_record(self, student_id: int, first_name: str, second_name: str,
                       age: int, sex: str) -> StudentRecord:
-        """Создание новой записи."""
+
         if age < 0:
             raise InvalidDataError("Поле age не может быть отрицательным.")
 
@@ -37,7 +37,7 @@ class StudentDB:
                       age: int | None = None,
                       sex: str | None = None,
                       ) -> list[StudentRecord]:
-        """Получение записей по фильтрам."""
+
         if all(p is None for p in (student_id, first_name, second_name, age, sex)):
             return self._students.copy()
 
@@ -67,7 +67,7 @@ class StudentDB:
                       new_age: int | None = None,
                       new_sex: str | None = None,
                       ) -> list[StudentRecord]:
-        """Обновление записей по фильтрам."""
+
         updated = []
 
         for i, rec in enumerate(self._students):
@@ -103,7 +103,7 @@ class StudentDB:
                       age: int | None = None,
                       sex: str | None = None,
                       ) -> list[StudentRecord] | None:
-        """Удаление записей по фильтрам."""
+
         if all(p is None for p in (student_id, first_name, second_name, age, sex)):
             return None
 
@@ -134,7 +134,6 @@ class StudentDB:
         return deleted
 
     def sort_records(self, field: str, reverse: bool = False) -> None:
-        """Сортировка записей по выбранному полю (возрастание/убывание)."""
         fields = {
             "id": 0,
             "first_name": 1,
