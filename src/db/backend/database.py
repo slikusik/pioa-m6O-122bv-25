@@ -24,6 +24,23 @@ class Database(ABC):
         table = self._load_table(table_name)
         return table.select_records(**filters)
 
+    def update_records(self, table_name: str, filters: dict[str, Any], new_values: dict[str, Any]) -> int:
+        table = self._load_table(table_name)
+        updated_count = table.update_records(filters, new_values)
+        self._save_table(table_name, table)
+        return updated_count
+
+    def delete_records(self, table_name: str, filters: dict[str, Any]) -> int:
+        table = self._load_table(table_name)
+        deleted_count = table.delete_records(filters)
+        self._save_table(table_name, table)
+        return deleted_count
+
+    def sort_records(self, table_name: str, field: str, reverse: bool = False) -> None:
+        table = self._load_table(table_name)
+        table.sort_records(field, reverse)
+        self._save_table(table_name, table)
+
     @abstractmethod
     def _table_exists(self, table_name: str) -> bool:
         """Проверяет наличие таблицы."""

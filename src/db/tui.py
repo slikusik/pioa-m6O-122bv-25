@@ -1,5 +1,7 @@
+# src/db/tui.py
 from .backend.file import FileDatabase, CsvDatabase
 from .backend.memory import MemoryDatabase
+from .backend.errors import TableAlreadyExistsError
 
 
 class StudentTUI:
@@ -19,7 +21,7 @@ class StudentTUI:
 
         try:
             self.db.create_table("students", ("id", "first_name", "second_name", "age", "sex"))
-        except Exception:
+        except TableAlreadyExistsError:
             pass
 
     def _print_menu(self) -> None:
@@ -69,15 +71,6 @@ class StudentTUI:
             return False
         return True
 
-    def _matches_filters(self, record: dict, filters: dict) -> bool:
-        for key, value in filters.items():
-            record_value = record.get(key)
-            if record_value is None:
-                return False
-            if str(record_value) != str(value):
-                return False
-        return True
-
     def _add(self) -> None:
         print("\nДобавление записи")
         sid = self._read_int("id: ")
@@ -122,16 +115,11 @@ class StudentTUI:
         sex = input("sex: ").strip() or None
 
         filters = {}
-        if sid is not None:
-            filters["id"] = sid
-        if fname is not None:
-            filters["first_name"] = fname
-        if sname is not None:
-            filters["second_name"] = sname
-        if age is not None:
-            filters["age"] = age
-        if sex is not None:
-            filters["sex"] = sex
+        if sid is not None: filters["id"] = sid
+        if fname is not None: filters["first_name"] = fname
+        if sname is not None: filters["second_name"] = sname
+        if age is not None: filters["age"] = age
+        if sex is not None: filters["sex"] = sex
 
         records = self.db.select_records("students", **filters)
         self._print_records(records)
@@ -146,23 +134,17 @@ class StudentTUI:
         sex = input("sex: ").strip() or None
 
         filters = {}
-        if sid is not None:
-            filters["id"] = sid
-        if fname is not None:
-            filters["first_name"] = fname
-        if sname is not None:
-            filters["second_name"] = sname
-        if age is not None:
-            filters["age"] = age
-        if sex is not None:
-            filters["sex"] = sex
+        if sid is not None: filters["id"] = sid
+        if fname is not None: filters["first_name"] = fname
+        if sname is not None: filters["second_name"] = sname
+        if age is not None: filters["age"] = age
+        if sex is not None: filters["sex"] = sex
 
         if not filters:
             print("Ошибка: укажите хотя бы одно поле для поиска.")
             return
 
-        table = self.db._load_table("students")
-        matching_records = [r for r in table.records if self._matches_filters(r, filters)]
+        matching_records = self.db.select_records("students", **filters)
         if not matching_records:
             print("Записи не найдены.")
             return
@@ -176,25 +158,20 @@ class StudentTUI:
         new_age = self._read_optional_int("new_age: ")
         new_sex = input("new_sex: ").strip() or None
 
-        if new_age is not None and not self._validate_age(new_age):
-            return
-        if new_sex is not None and not self._validate_sex(new_sex):
+        if new_age is not None and not self._validate_age(new_age): return
+        if new_sex is not None and not self._validate_sex(new_sex): return
+
+        new_values = {}
+        if new_fname is not None: new_values["first_name"] = new_fname
+        if new_sname is not None: new_values["second_name"] = new_sname
+        if new_age is not None: new_values["age"] = new_age
+        if new_sex is not None: new_values["sex"] = new_sex
+
+        if not new_values:
+            print("Новые значения не заданы. Обновление отменено.")
             return
 
-        updated_count = 0
-        for record in table.records:
-            if self._matches_filters(record, filters):
-                if new_fname is not None:
-                    record["first_name"] = new_fname
-                if new_sname is not None:
-                    record["second_name"] = new_sname
-                if new_age is not None:
-                    record["age"] = new_age
-                if new_sex is not None:
-                    record["sex"] = new_sex
-                updated_count += 1
-
-        self.db._save_table("students", table)
+        updated_count = self.db.update_records("students", filters, new_values)
         print(f"Обновлено записей: {updated_count}")
 
     def _delete(self) -> None:
@@ -207,34 +184,25 @@ class StudentTUI:
         sex = input("sex: ").strip() or None
 
         filters = {}
-        if sid is not None:
-            filters["id"] = sid
-        if fname is not None:
-            filters["first_name"] = fname
-        if sname is not None:
-            filters["second_name"] = sname
-        if age is not None:
-            filters["age"] = age
-        if sex is not None:
-            filters["sex"] = sex
+        if sid is not None: filters["id"] = sid
+        if fname is not None: filters["first_name"] = fname
+        if sname is not None: filters["second_name"] = sname
+        if age is not None: filters["age"] = age
+        if sex is not None: filters["sex"] = sex
 
         if not filters:
             print("Ошибка: укажите хотя бы одно поле для удаления.")
             return
 
-        table = self.db._load_table("students")
-        indices_to_delete = [i for i, record in enumerate(table.records) if self._matches_filters(record, filters)]
-
-        if not indices_to_delete:
+        matching_records = self.db.select_records("students", **filters)
+        if not matching_records:
             print("Записи не найдены.")
             return
 
-        print(f"Найдено записей для удаления: {len(indices_to_delete)}")
-        for i in indices_to_delete:
-            r = table.records[i]
+        print(f"Найдено записей для удаления: {len(matching_records)}")
+        for r in matching_records:
             print(f"  ID: {r.get('id')}, Имя: {r.get('first_name')}, Фамилия: {r.get('second_name')}")
 
-        # ВАЛИДАЦИЯ: требуем явного ввода "д" или "н"
         while True:
             confirm = input("Удалить? (д/н): ").strip().lower()
             if confirm in ("д", "н", "y", "n", "yes", "no", "1", "0"):
@@ -245,11 +213,8 @@ class StudentTUI:
             print("Удаление отменено.")
             return
 
-        for i in reversed(indices_to_delete):
-            table.records.pop(i)
-
-        self.db._save_table("students", table)
-        print(f"Удалено записей: {len(indices_to_delete)}")
+        deleted_count = self.db.delete_records("students", filters)
+        print(f"Удалено записей: {deleted_count}")
 
     def _sort(self) -> None:
         print("\nСортировка записей")
@@ -260,7 +225,6 @@ class StudentTUI:
             print("Ошибка: неизвестное поле.")
             return
 
-        # ВАЛИДАЦИЯ: требуем явного ввода "д" или "н"
         while True:
             asc_input = input("По возрастанию? (д/н): ").strip().lower()
             if asc_input in ("д", "н", "y", "n", "yes", "no", "1", "0"):
@@ -269,15 +233,12 @@ class StudentTUI:
 
         reverse = asc_input not in ("д", "y", "yes", "1")
 
-        table = self.db._load_table("students")
         try:
-            table.records.sort(key=lambda r: r[field], reverse=reverse)
-        except TypeError:
-            table.records.sort(key=lambda r: str(r[field]), reverse=reverse)
-
-        self.db._save_table("students", table)
-        print("Записи отсортированы.")
-        self._print_records(table.records)
+            self.db.sort_records("students", field, reverse=reverse)
+            print("Записи отсортированы.")
+            self._print_records(self.db.select_records("students"))
+        except Exception as e:
+            print(f"Ошибка сортировки: {e}")
 
     def run(self) -> None:
         while True:

@@ -82,8 +82,22 @@ class CsvDatabase(Database):
             with table_path.open("r", encoding="utf-8-sig", newline="") as file:
                 reader = csv.DictReader(file, delimiter=';')
                 columns = tuple(reader.fieldnames) if reader.fieldnames else ()
-                records = list(reader)
-        except Exception as error:
+
+                records = []
+                for row in reader:
+                    typed_row = {}
+                    for k, v in row.items():
+                        # Приведение типов для CSV
+                        if v.isdigit() or (v.startswith('-') and v[1:].isdigit()):
+                            typed_row[k] = int(v)
+                        else:
+                            try:
+                                typed_row[k] = float(v)
+                            except ValueError:
+                                typed_row[k] = v
+                    records.append(typed_row)
+
+        except (OSError, csv.Error) as error:
             raise InvalidStorageDataError(
                 f"Ошибка чтения CSV-файла: {error}"
             ) from error
