@@ -1,4 +1,3 @@
-# src/db/backend/memory.py
 from .database import Database
 from .errors import TableNotFoundError
 from .table import Table
@@ -13,10 +12,7 @@ class MemoryDatabase(Database):
 
     def _load_table(self, table_name: str) -> Table:
         if table_name not in self.tables:
-            raise TableNotFoundError(
-                f"Таблица '{table_name}' не существует."
-            )
-
+            raise TableNotFoundError(f"Таблица '{table_name}' не существует")
         return self.tables[table_name]
 
     def _save_table(self, table_name: str, table: Table) -> None:

@@ -1,7 +1,13 @@
-# src/db/tui.py
 from .backend.file import FileDatabase, CsvDatabase
 from .backend.memory import MemoryDatabase
-from .backend.errors import TableAlreadyExistsError
+from .backend.errors import (
+    TableAlreadyExistsError,
+    InvalidDataError,
+    TableNotFoundError,
+    MissingColumnError,
+    UnknownColumnError,
+    InvalidStorageDataError,
+)
 
 
 class StudentTUI:
@@ -59,17 +65,38 @@ class StudentTUI:
         for r in records:
             print(f"  ID: {r['id']}, Имя: {r['first_name']}, Фамилия: {r['second_name']}, Возраст: {r['age']}, Пол: {r['sex']}")
 
-    def _validate_age(self, age: int) -> bool:
-        if age < 0:
-            print("Ошибка: Поле age не может быть отрицательным.")
-            return False
-        return True
+    def _build_filters(self) -> dict:
+        sid = self._read_optional_int("id: ")
+        fname = input("first_name: ").strip() or None
+        sname = input("second_name: ").strip() or None
+        age = self._read_optional_int("age: ")
+        sex = input("sex: ").strip() or None
 
-    def _validate_sex(self, sex: str) -> bool:
-        if not sex.isalpha():
-            print("Ошибка: Поле sex должно содержать только буквы.")
-            return False
-        return True
+        filters = {}
+        if sid is not None:
+            filters["id"] = sid
+        if fname is not None:
+            filters["first_name"] = fname
+        if sname is not None:
+            filters["second_name"] = sname
+        if age is not None:
+            filters["age"] = age
+        if sex is not None:
+            filters["sex"] = sex
+
+        return filters
+
+    def _handle_db_error(self, error: Exception) -> None:
+        if isinstance(error, InvalidDataError):
+            print(f"Ошибка валидации: {error}")
+        elif isinstance(error, (MissingColumnError, UnknownColumnError)):
+            print(f"Ошибка структуры: {error}")
+        elif isinstance(error, TableNotFoundError):
+            print(f"Таблица не найдена: {error}")
+        elif isinstance(error, InvalidStorageDataError):
+            print(f"Ошибка чтения данных: {error}")
+        else:
+            print(f"Ошибка: {error}")
 
     def _add(self) -> None:
         print("\nДобавление записи")
@@ -79,128 +106,104 @@ class StudentTUI:
         age = self._read_int("age: ")
         sex = input("sex: ").strip()
 
-        if not self._validate_age(age):
-            return
-        if not self._validate_sex(sex):
-            return
-
-        all_records = self.db.select_records("students")
-        for record in all_records:
-            if str(record.get("id")) == str(sid):
-                print(f"Ошибка: Студент с ID {sid} уже существует.")
-                return
-
         try:
             self.db.insert_record("students", {
                 "id": sid,
                 "first_name": fname,
                 "second_name": sname,
                 "age": age,
-                "sex": sex
+                "sex": sex,
             })
-            print("Запись добавлена!")
-        except Exception as e:
-            print(f"Ошибка: {e}")
+            print("Запись добавлена")
+        except (InvalidDataError, MissingColumnError, UnknownColumnError, TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
 
     def _show_all(self) -> None:
         print("\nСписок записей")
-        self._print_records(self.db.select_records("students"))
+        try:
+            records = self.db.select_records("students")
+            self._print_records(records)
+        except (TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
 
     def _find(self) -> None:
-        print("\nПоиск (Enter – пропустить поле)")
-        sid = self._read_optional_int("id: ")
-        fname = input("first_name: ").strip() or None
-        sname = input("second_name: ").strip() or None
-        age = self._read_optional_int("age: ")
-        sex = input("sex: ").strip() or None
-
-        filters = {}
-        if sid is not None: filters["id"] = sid
-        if fname is not None: filters["first_name"] = fname
-        if sname is not None: filters["second_name"] = sname
-        if age is not None: filters["age"] = age
-        if sex is not None: filters["sex"] = sex
-
-        records = self.db.select_records("students", **filters)
-        self._print_records(records)
+        print("\nПоиск (Enter - пропустить поле)")
+        filters = self._build_filters()
+        try:
+            records = self.db.select_records("students", **filters)
+            self._print_records(records)
+        except (UnknownColumnError, TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
 
     def _update(self) -> None:
         print("\nОбновление по фильтру")
-        print("Введите условия поиска (Enter – пропустить):")
-        sid = self._read_optional_int("id: ")
-        fname = input("first_name: ").strip() or None
-        sname = input("second_name: ").strip() or None
-        age = self._read_optional_int("age: ")
-        sex = input("sex: ").strip() or None
-
-        filters = {}
-        if sid is not None: filters["id"] = sid
-        if fname is not None: filters["first_name"] = fname
-        if sname is not None: filters["second_name"] = sname
-        if age is not None: filters["age"] = age
-        if sex is not None: filters["sex"] = sex
+        print("Введите условия поиска (Enter - пропустить):")
+        filters = self._build_filters()
 
         if not filters:
             print("Ошибка: укажите хотя бы одно поле для поиска.")
             return
 
-        matching_records = self.db.select_records("students", **filters)
-        if not matching_records:
+        try:
+            matching = self.db.select_records("students", **filters)
+        except (UnknownColumnError, TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
+            return
+
+        if not matching:
             print("Записи не найдены.")
             return
 
-        print(f"Найдено записей: {len(matching_records)}")
-        self._print_records(matching_records)
+        print(f"Найдено записей: {len(matching)}")
+        self._print_records(matching)
 
-        print("\nНовые значения (Enter – не менять):")
+        print("\nНовые значения (Enter - не менять):")
         new_fname = input("new_first_name: ").strip() or None
         new_sname = input("new_second_name: ").strip() or None
         new_age = self._read_optional_int("new_age: ")
         new_sex = input("new_sex: ").strip() or None
 
-        if new_age is not None and not self._validate_age(new_age): return
-        if new_sex is not None and not self._validate_sex(new_sex): return
-
         new_values = {}
-        if new_fname is not None: new_values["first_name"] = new_fname
-        if new_sname is not None: new_values["second_name"] = new_sname
-        if new_age is not None: new_values["age"] = new_age
-        if new_sex is not None: new_values["sex"] = new_sex
+        if new_fname is not None:
+            new_values["first_name"] = new_fname
+        if new_sname is not None:
+            new_values["second_name"] = new_sname
+        if new_age is not None:
+            new_values["age"] = new_age
+        if new_sex is not None:
+            new_values["sex"] = new_sex
 
         if not new_values:
             print("Новые значения не заданы. Обновление отменено.")
             return
 
-        updated_count = self.db.update_records("students", filters, new_values)
-        print(f"Обновлено записей: {updated_count}")
+        try:
+            count = self.db.update_records("students", filters, new_values)
+            print(f"Обновлено записей: {count}")
+        except (InvalidDataError, UnknownColumnError, TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
 
     def _delete(self) -> None:
         print("\nУдаление по фильтру")
-        print("Введите условия поиска (Enter – пропустить):")
-        sid = self._read_optional_int("id: ")
-        fname = input("first_name: ").strip() or None
-        sname = input("second_name: ").strip() or None
-        age = self._read_optional_int("age: ")
-        sex = input("sex: ").strip() or None
-
-        filters = {}
-        if sid is not None: filters["id"] = sid
-        if fname is not None: filters["first_name"] = fname
-        if sname is not None: filters["second_name"] = sname
-        if age is not None: filters["age"] = age
-        if sex is not None: filters["sex"] = sex
+        print("Введите условия поиска (Enter - пропустить):")
+        filters = self._build_filters()
 
         if not filters:
             print("Ошибка: укажите хотя бы одно поле для удаления.")
             return
 
-        matching_records = self.db.select_records("students", **filters)
-        if not matching_records:
+        try:
+            matching = self.db.select_records("students", **filters)
+        except (UnknownColumnError, TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
+            return
+
+        if not matching:
             print("Записи не найдены.")
             return
 
-        print(f"Найдено записей для удаления: {len(matching_records)}")
-        for r in matching_records:
+        print(f"Найдено записей для удаления: {len(matching)}")
+        for r in matching:
             print(f"  ID: {r.get('id')}, Имя: {r.get('first_name')}, Фамилия: {r.get('second_name')}")
 
         while True:
@@ -213,8 +216,11 @@ class StudentTUI:
             print("Удаление отменено.")
             return
 
-        deleted_count = self.db.delete_records("students", filters)
-        print(f"Удалено записей: {deleted_count}")
+        try:
+            count = self.db.delete_records("students", filters)
+            print(f"Удалено записей: {count}")
+        except (UnknownColumnError, TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
 
     def _sort(self) -> None:
         print("\nСортировка записей")
@@ -226,19 +232,20 @@ class StudentTUI:
             return
 
         while True:
-            asc_input = input("По возрастанию? (д/н): ").strip().lower()
-            if asc_input in ("д", "н", "y", "n", "yes", "no", "1", "0"):
+            asc = input("По возрастанию? (д/н): ").strip().lower()
+            if asc in ("д", "н", "y", "n", "yes", "no", "1", "0"):
                 break
             print("Ошибка: введите 'д' (да) или 'н' (нет).")
 
-        reverse = asc_input not in ("д", "y", "yes", "1")
+        reverse = asc not in ("д", "y", "yes", "1")
 
         try:
             self.db.sort_records("students", field, reverse=reverse)
             print("Записи отсортированы.")
-            self._print_records(self.db.select_records("students"))
-        except Exception as e:
-            print(f"Ошибка сортировки: {e}")
+            records = self.db.select_records("students")
+            self._print_records(records)
+        except (UnknownColumnError, TableNotFoundError, InvalidStorageDataError) as error:
+            self._handle_db_error(error)
 
     def run(self) -> None:
         while True:
